@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VisionEnforce Radar — Predictive Congestion Intelligence</title>
+  <meta name="description" content="Real-time congestion risk radar for Bengaluru traffic — powered by violation detection and predictive scoring." />
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <!-- Google Maps JS API — Replace YOUR_GOOGLE_MAPS_API_KEY with your key -->
+  <!-- Free tier: 28,000 map loads/month. Get key at: console.cloud.google.com -->
+  <script>
+    // If key is placeholder, we'll use a static fallback map iframe
+    window.GMAPS_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
+    window.GMAPS_REAL = window.GMAPS_KEY !== 'YOUR_GOOGLE_MAPS_API_KEY';
+  </script>
+
+  <style>
+    /* ─── Design Tokens ─── */
+    :root {
+      --bg-primary:     #f8f9fc;
+      --bg-secondary:   #ffffff;
+      --bg-tertiary:    #f1f3f8;
+      --text-primary:   #0f172a;
+      --text-secondary: #475569;
+      --text-muted:     #94a3b8;
+      --border:         #e2e8f0;
+      --border-strong:  #cbd5e1;
+      --brand:          #2563eb;
+      --brand-light:    #eff6ff;
+      --brand-hover:    #1d4ed8;
+      --critical:       #dc2626;
+      --critical-light: #fef2f2;
+      --critical-border:#fca5a5;
+      --high:           #ea580c;
+      --high-light:     #fff7ed;
+      --high-border:    #fed7aa;
+      --medium:         #ca8a04;
+      --medium-light:   #fefce8;
+      --medium-border:  #fde68a;
+      --low:            #16a34a;
+      --low-light:      #f0fdf4;
+      --low-border:     #bbf7d0;
+      --shadow-sm:      0 1px 3px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);
+      --shadow-md:      0 4px 16px rgba(15,23,42,.10),0 2px 6px rgba(15,23,42,.06);
+      --shadow-lg:      0 10px 40px rgba(15,23,42,.12),0 4px 12px rgba(15,23,42,.06);
+      --shadow-xl:      0 20px 60px rgba(15,23,42,.16);
+      --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-xl: 20px;
+    }
+
+    *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Navbar ─── */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+      height: 58px;
+      display: flex; align-items: center; gap: 20px; padding: 0 20px;
+      background: rgba(255,255,255,0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 1px 0 var(--border), var(--shadow-sm);
+    }
+
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; flex-shrink: 0;
+    }
+
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .95rem;
+      box-shadow: 0 2px 8px rgba(37,99,235,.30);
+      color: #fff;
+    }
+
+    .logo-text {
+      font-size: 1.1rem; font-weight: 800;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-sub {
+      font-size: .68rem; font-weight: 600;
+      color: var(--text-muted); letter-spacing: .4px; text-transform: uppercase;
+      -webkit-text-fill-color: var(--text-muted); /* override gradient text for sub */
+    }
+
+    .nav-links {
+      display: flex; list-style: none; gap: 3px;
+    }
+
+    .nav-links a {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 13px; border-radius: var(--radius-sm);
+      color: var(--text-secondary); text-decoration: none;
+      font-weight: 500; font-size: .85rem; transition: all .15s;
+    }
+
+    .nav-links a:hover { background: #f0f4ff; color: var(--brand); }
+    .nav-links a.active { background: var(--brand-light); color: var(--brand); font-weight: 700; }
+
+    .nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+    /* Live indicator */
+    .live-pill {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 11px; border-radius: 20px;
+      background: var(--critical-light); border: 1px solid var(--critical-border);
+      font-size: .7rem; font-weight: 700; color: var(--critical);
+      text-transform: uppercase; letter-spacing: .4px;
+    }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--critical);
+      animation: pulseDot 1.3s ease-in-out infinite;
+    }
+
+    .ws-chip {
+      display: flex; align-items: center; gap: 5px;
+      font-size: .72rem; color: var(--text-muted);
+    }
+    .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; transition: background .3s; }
+    .ws-dot.connected { background: #16a34a; animation: pulseDot 2s infinite; }
+
+    .officer-chip {
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 11px 4px 5px; border-radius: 40px;
+      background: var(--bg-tertiary); border: 1px solid var(--border);
+      font-size: .8rem; font-weight: 600; color: var(--text-secondary);
+    }
+    .officer-avatar {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .63rem; font-weight: 800; color: #fff; letter-spacing: .5px;
+    }
+
+    /* ─── Main Layout ─── */
+    .main-wrap {
+      position: fixed; inset: 0; top: 58px;
+      display: flex;
+    }
+
+    /* ─── Map container ─── */
+    #map-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #google-map {
+      width: 100%; height: 100%;
+    }
+
+    /* Fallback iframe if no API key */
+    #map-fallback {
+      width: 100%; height: 100%;
+      border: none;
+      display: none;
+    }
+
+    /* ─── Risk Score Overlay (bottom-left map overlay) ─── */
+    .map-legend {
+      position: absolute; bottom: 24px; left: 20px; z-index: 100;
+      background: rgba(255,255,255,0.95);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 18px;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(8px);
+      min-width: 200px;
+    }
+
+    .legend-title {
+      font-size: .7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--text-muted); margin-bottom: 10px;
+    }
+
+    .legend-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px; font-size: .8rem; color: var(--text-secondary);
+    }
+
+    .legend-circle {
+      width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid rgba(0,0,0,.1);
+    }
+
+    /* ─── Refresh strip (top of map) ─── */
+    .map-strip {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 100;
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,0.97);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 7px 16px;
+      box-shadow: var(--shadow-md);
+      font-size: .78rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .map-strip i { color: var(--brand); }
+
+    /* ─── Right Side Panel ─── */
+    #side-panel {
+      width: 380px;
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform .3s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* Panel header */
+    .panel-header {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+    }
+
+    .panel-tabs {
+      display: flex; gap: 4px; margin-top: 14px;
+    }
+
+    .panel-tab {
+      flex: 1; padding: 8px; text-align: center;
+      border-radius: var(--radius-sm); border: 1px solid var(--border);
+      background: var(--bg-tertiary); color: var(--text-secondary);
+      font-size: .78rem; font-weight: 600; cursor: pointer;
+      transition: all .15s;
+    }
+
+    .panel-tab.active {
+      background: var(--brand-light); color: var(--brand);
+      border-color: #bfdbfe; font-weight: 700;
+    }
+
+    .panel-body {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+    }
+
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+    /* ─── Tab content panes ─── */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ─── Risk cards (hotspot list) ─── */
+    .risk-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all .18s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .risk-card::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    }
+
+    .risk-card.CRITICAL::before { background: var(--critical); }
+    .risk-card.HIGH::before     { background: var(--high); }
+    .risk-card.MEDIUM::before   { background: var(--medium); }
+    .risk-card.LOW::before      { background: #94a3b8; }
+
+    .risk-card.CRITICAL { border-color: var(--critical-border); background: var(--critical-light); }
+    .risk-card.HIGH     { border-color: var(--high-border); background: var(--high-light); }
+    .risk-card.MEDIUM   { border-color: var(--medium-border); background: var(--medium-light); }
+
+    .risk-card:hover { box-shadow: var(--shadow-md); transform: translateX(2px); }
+
+    .risk-card-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .risk-location { font-size: .88rem; font-weight: 700; color: var(--text-primary); line-height: 1.3; }
+    .risk-cam-id { font-size: .68rem; color: var(--text-muted); font-family: monospace; margin-top: 2px; }
+
+    .risk-badge {
+      padding: 4px 10px; border-radius: 20px;
+      font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .3px;
+      flex-shrink: 0;
+    }
+
+    .risk-badge.CRITICAL { background: var(--critical); color: #fff; }
+    .risk-badge.HIGH     { background: var(--high); color: #fff; }
+    .risk-badge.MEDIUM   { background: var(--medium); color: #fff; }
+    .risk-badge.LOW      { background: #64748b; color: #fff; }
+
+    /* Score bar */
+    .score-bar-wrap { margin-bottom: 10px; }
+    .score-bar-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .score-label { font-size: .7rem; color: var(--text-muted); font-weight: 600; }
+    .score-value { font-size: .8rem; font-weight: 800; }
+    .score-track {
+      height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;
+    }
+    .score-fill {
+      height: 100%; border-radius: 3px;
+      transition: width .8s cubic-bezier(.4,0,.2,1);
+    }
+    .score-fill.CRITICAL { background: linear-gradient(90deg, #dc2626, #ef4444); }
+    .score-fill.HIGH     { background: linear-gradient(90deg, #ea580c, #fb923c); }
+    .score-fill.MEDIUM   { background: linear-gradient(90deg, #ca8a04, #facc15); }
+    .score-fill.LOW      { background: linear-gradient(90deg, #16a34a, #4ade80); }
+
+    .risk-explanation {
+      font-size: .78rem; color: var(--text-secondary); line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .risk-action {
+      display: flex; align-items: flex-start; gap: 7px;
+      padding: 9px 12px; border-radius: var(--radius-sm);
+      background: var(--brand-light); border: 1px solid #bfdbfe;
+      font-size: .75rem; color: var(--brand); line-height: 1.4;
+    }
+
+    .risk-action i { margin-top: 1px; flex-shrink: 0; }
+
+    .risk-factors {
+      display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;
+    }
+
+    .factor-chip {
+      padding: 3px 8px; border-radius: 12px;
+      font-size: .68rem; font-weight: 600;
+      background: var(--bg-tertiary); border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    /* ─── Detail panel (clicked camera) ─── */
+    #detail-panel-content { display: none; }
+    #detail-panel-empty {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px; height: 100%;
+      padding: 40px 24px; text-align: center; color: var(--text-muted);
+    }
+    #detail-panel-empty i { font-size: 3rem; opacity: .25; }
+    #detail-panel-empty p { font-size: .85rem; line-height: 1.6; max-width: 240px; }
+
+    /* ─── Config panel ─── */
+    .config-section { margin-bottom: 24px; }
+    .config-section-title {
+      font-size: .78rem; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .5px;
+      margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+
+    .config-row {
+      display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px;
+    }
+
+    .config-label {
+      font-size: .8rem; font-weight: 600; color: var(--text-primary);
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .config-hint { font-size: .72rem; color: var(--text-muted); font-weight: 400; }
+
+    .config-input {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      font-family: inherit; font-size: .875rem;
+      background: var(--bg-primary); color: var(--text-primary);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+
+    .config-input:focus {
+      border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+
+    .config-select { appearance: none; cursor: pointer; }
+
+    .slider-wrap { display: flex; align-items: center; gap: 10px; }
+
+    .slider {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 5px; border-radius: 5px;
+      background: linear-gradient(to right, var(--brand) 0%, var(--brand) var(--pct, 50%), var(--border-strong) var(--pct, 50%), var(--border-strong) 100%);
+      outline: none; cursor: pointer;
+    }
+
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--brand); cursor: pointer;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(37,99,235,.35);
+      transition: transform .15s;
+    }
+
+    .slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+    .slider-val {
+      min-width: 48px; text-align: right;
+      font-size: .875rem; font-weight: 700; color: var(--brand);
+    }
+
+    .config-save-btn {
+      width: 100%; padding: 11px;
+      background: var(--brand); color: #fff;
+      border: none; border-radius: var(--radius-md);
+      font-family: inherit; font-size: .875rem; font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(37,99,235,.30);
+      transition: all .15s;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+
+    .config-save-btn:hover { background: var(--brand-hover); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37,99,235,.35); }
+
+    .config-success {
+      display: flex; align-items: center; gap: 8px;
+      padding: 11px 14px; border-radius: var(--radius-sm);
+      background: var(--low-light); border: 1px solid var(--low-border);
+      color: var(--low); font-size: .8rem; font-weight: 600;
+      margin-top: 10px; display: none;
+    }
+
+    /* ─── Bottom control strip ─── */
+    .panel-footer {
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      background: var(--bg-tertiary);
+      display: flex; align-items: center; gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: var(--radius-sm);
+      background: var(--brand); color: #fff; border: none;
+      font-family: inherit; font-size: .85rem; font-weight: 700;
+      cursor: pointer; transition: all .15s;
+      box-shadow: 0 2px 8px rgba(37,99,235,.25);
+    }
+    .btn-primary:hover { background: var(--brand-hover); transform: translateY(-1px); }
+
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: var(--radius-sm);
+      background: transparent; color: var(--text-secondary);
+      border: 1px solid var(--border); font-family: inherit;
+      font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .btn-ghost:hover { background: var(--brand-light); color: var(--brand); border-color: #bfdbfe; }
+
+    /* ─── Toast Notifications ─── */
+    .toast-container {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 10px; max-width: 360px;
+    }
+
+    .toast {
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 13px 16px;
+      box-shadow: var(--shadow-lg);
+      display: flex; align-items: flex-start; gap: 11px;
+      font-size: .84rem; color: var(--text-primary);
+      animation: slideInRight .3s cubic-bezier(.34,1.56,.64,1);
+    }
+
+    .toast.CRITICAL { border-left: 3px solid var(--critical); }
+    .toast.HIGH     { border-left: 3px solid var(--high); }
+    .toast.MEDIUM   { border-left: 3px solid var(--medium); }
+    .toast.success  { border-left: 3px solid #16a34a; }
+
+    .toast-title { font-weight: 700; margin-bottom: 2px; }
+    .toast-msg   { color: var(--text-secondary); font-size: .76rem; }
+
+    /* ─── Shimmer / skeleton ─── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border) 50%, var(--bg-tertiary) 75%);
+      background-size: 200% 100%; border-radius: var(--radius-sm);
+      animation: shimmer 1.5s infinite;
+    }
+
+    .loading-state {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 30px; color: var(--text-muted); font-size: .85rem;
+    }
+
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border); border-top-color: var(--brand);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+
+    /* ─── Google Maps custom marker styles ─── */
+    .gm-style .map-info-window {
+      background: var(--bg-secondary); border-radius: var(--radius-md);
+      padding: 12px 16px; border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+    }
+
+    /* ─── Animations ─── */
+    @keyframes pulseDot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:.5; transform:scale(.85); }
+    }
+
+    @keyframes slideInRight {
+      from { transform:translateX(40px); opacity:0; }
+      to   { transform:translateX(0); opacity:1; }
+    }
+
+    @keyframes shimmer {
+      from { background-position:200% 0; }
+      to   { background-position:-200% 0; }
+    }
+
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    @keyframes popIn {
+      0%   { transform:scale(.6); opacity:0; }
+      80%  { transform:scale(1.08); }
+      100% { transform:scale(1); opacity:1; }
+    }
+
+    @keyframes pulse-ring {
+      0%   { transform:scale(0.8); opacity:1; }
+      100% { transform:scale(2.2); opacity:0; }
+    }
+
+    /* Custom map marker pin styles */
+    .custom-marker {
+      position: relative; cursor: pointer;
+    }
+
+    .marker-pin {
+      width: 36px; height: 36px; border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      display: flex; align-items: center; justify-content: center;
+      border: 3px solid #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,.3);
+      transition: transform .2s;
+    }
+
+    .marker-pin i { transform: rotate(45deg); font-size: .9rem; color: #fff; }
+
+    .marker-pulse {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      animation: pulse-ring 2s ease-out infinite;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAVBAR ═══════════════════════════════════════════════════ -->
+<nav class="navbar" id="mainNav">
+  <a href="radar.html" class="logo">
+    <div class="logo-icon"><i class="fas fa-satellite-dish"></i></div>
+    <div>
+      <div class="logo-text">VisionEnforce</div>
+      <div class="logo-sub">Radar</div>
+    </div>
+  </a>
+
+  <ul class="nav-links">
+    <li><a href="radar.html" class="active" id="nav-radar"><i class="fas fa-map-location-dot"></i> Radar</a></li>
+    <li><a href="/interactive" id="nav-interactive"><i class="fas fa-draw-polygon"></i> Interactive</a></li>
+    <li><a href="monitor.html" id="nav-monitor"><i class="fas fa-satellite-dish"></i> Monitor</a></li>
+    <li><a href="review.html" id="nav-review"><i class="fas fa-user-shield"></i> Review</a></li>
+    <li><a href="analytics.html" id="nav-analytics"><i class="fas fa-chart-line"></i> Analytics</a></li>
+  </ul>
+
+  <div class="nav-right">
+    <div class="live-pill"><div class="live-dot"></div> Live</div>
+    <div class="ws-chip">
+      <div class="ws-dot" id="wsDot"></div>
+      <span id="wsStatus">Connecting…</span>
+    </div>
+    <div class="officer-chip">
+      <div class="officer-avatar">RK</div>
+      <span>Const. Ravi Kumar</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ MAIN WRAP ═════════════════════════════════════════════════ -->
+<div class="main-wrap">
+
+  <!-- MAP AREA -->
+  <div id="map-container">
+    <!-- Fallback: embed when no real API key -->
+    <iframe id="map-fallback"
+      src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d124416.06622820261!2d77.48042625!3d12.953945!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bae1670c9b44e6d%3A0xf8dfc3e8517e4fe0!2sBengaluru%2C%20Karnataka!5e0!3m2!1sen!2sin!4v1718880000000!5m2!1sen!2sin"
+      width="100%" height="100%" style="border:0;" allowfullscreen loading="lazy">
+    </iframe>
+    <div id="google-map"></div>
+
+    <!-- Map strip (top-center overlay) -->
+    <div class="map-strip" id="mapStrip">
+      <i class="fas fa-circle-nodes"></i>
+      <span>Risk scores updating every <strong>30s</strong></span>
+      <span id="stripUpdated" style="color:var(--text-muted);">—</span>
+      <button class="btn-ghost" style="padding:4px 10px;font-size:.72rem;" id="refreshBtn">
+        <i class="fas fa-rotate-right"></i> Refresh
+      </button>
+    </div>
+
+    <!-- Risk legend -->
+    <div class="map-legend">
+      <div class="legend-title">Congestion Risk</div>
+      <div class="legend-row"><div class="legend-circle" style="background:#dc2626;"></div> Critical ≥70</div>
+      <div class="legend-row"><div class="legend-circle" style="background:#ea580c;"></div> High 45–69</div>
+      <div class="legend-row"><div class="legend-circle" style="background:#ca8a04;"></div> Medium 20–44</div>
+      <div class="legend-row"><div class="legend-circle" style="background:#16a34a;"></div> Low &lt;20</div>
+      <div style="height:1px;background:var(--border);margin:10px 0;"></div>
+      <div style="font-size:.7rem;color:var(--text-muted);">Click marker → details</div>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div id="side-panel">
+    <!-- Panel header -->
+    <div class="panel-header">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:1rem;font-weight:800;color:var(--text-primary);letter-spacing:-.3px;">
+            Congestion Radar
+          </div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;">
+            <span id="panelSubtitle">Loading camera risk scores…</span>
+          </div>
+        </div>
+        <div id="overallRiskBadge" style="padding:6px 14px;border-radius:20px;font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.3px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-muted);">
+          —
+        </div>
+      </div>
+
+      <div class="panel-tabs">
+        <div class="panel-tab active" id="tab-hotspots" onclick="switchTab('hotspots')">
+          <i class="fas fa-fire"></i> Hotspots
+        </div>
+        <div class="panel-tab" id="tab-detail" onclick="switchTab('detail')">
+          <i class="fas fa-location-dot"></i> Location
+        </div>
+        <div class="panel-tab" id="tab-config" onclick="switchTab('config')">
+          <i class="fas fa-sliders"></i> Config
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel body -->
+    <div class="panel-body">
+
+      <!-- TAB: Hotspots -->
+      <div class="tab-pane active" id="pane-hotspots">
+        <div id="hotspot-list">
+          <div class="loading-state">
+            <div class="spinner"></div> Computing risk scores…
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Location detail -->
+      <div class="tab-pane" id="pane-detail">
+        <div id="detail-panel-empty">
+          <i class="fas fa-map-pin"></i>
+          <p>Click a camera marker on the map to see its risk breakdown and recent violations.</p>
+        </div>
+        <div id="detail-panel-content"></div>
+      </div>
+
+      <!-- TAB: Config -->
+      <div class="tab-pane" id="pane-config">
+        <div class="config-section">
+          <div class="config-section-title"><i class="fas fa-camera" style="color:var(--brand);"></i> Select Camera</div>
+          <div class="config-row">
+            <label class="config-label">Camera Location</label>
+            <select class="config-input config-select" id="configCameraSelect">
+              <option value="">Select a camera…</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="config-form" style="display:none;">
+          <div class="config-section">
+            <div class="config-section-title"><i class="fas fa-clock" style="color:var(--brand);"></i> Illegal Parking Threshold</div>
+            <div class="config-row">
+              <label class="config-label">
+                Stationary Duration Threshold
+                <span class="config-hint">— minutes before flagged as long-duration</span>
+              </label>
+              <div class="slider-wrap">
+                <input type="range" class="slider" id="parkingThresholdSlider"
+                  min="1" max="20" value="5" step="0.5"
+                  oninput="updateSliderDisplay(this, 'parkingThresholdVal', ' min')"
+                  style="--pct:20%;" />
+                <div class="slider-val" id="parkingThresholdVal">5 min</div>
+              </div>
+              <div style="font-size:.72rem;color:var(--text-muted);margin-top:4px;">
+                Vehicle parked longer than this in a no-parking zone contributes heavily to risk score
+              </div>
+            </div>
+          </div>
+
+          <div class="config-section">
+            <div class="config-section-title"><i class="fas fa-window-restore" style="color:var(--brand);"></i> Risk Scoring Window</div>
+            <div class="config-row">
+              <label class="config-label">
+                Time Window
+                <span class="config-hint">— minutes of history to score</span>
+              </label>
+              <div class="slider-wrap">
+                <input type="range" class="slider" id="windowSlider"
+                  min="5" max="60" value="30" step="5"
+                  oninput="updateSliderDisplay(this, 'windowSliderVal', ' min')"
+                  style="--pct:46%;" />
+                <div class="slider-val" id="windowSliderVal">30 min</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="config-save-btn" id="configSaveBtn" onclick="saveZoneConfig()">
+            <i class="fas fa-floppy-disk"></i> Save Configuration
+          </button>
+
+          <div class="config-success" id="configSuccess">
+            <i class="fas fa-circle-check"></i>
+            Configuration saved and applied — risk scores will update on next cycle.
+          </div>
+        </div>
+
+        <div id="config-placeholder" style="padding:30px;text-align:center;color:var(--text-muted);">
+          <i class="fas fa-camera" style="font-size:2rem;opacity:.3;display:block;margin-bottom:12px;"></i>
+          <p style="font-size:.85rem;">Select a camera above to configure its thresholds</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Panel footer -->
+    <div class="panel-footer">
+      <button class="btn-primary" id="startSimBtn" onclick="startSimulation()">
+        <i class="fas fa-play"></i> Run Simulation
+      </button>
+      <button class="btn-ghost" onclick="refreshRiskScores()">
+        <i class="fas fa-arrows-rotate"></i> Refresh
+      </button>
+      <a href="review.html" class="btn-ghost" style="margin-left:auto;text-decoration:none;" id="reviewQueueBtn">
+        <i class="fas fa-inbox"></i> Review Queue
+        <span id="pendingBadge" style="background:var(--critical);color:#fff;border-radius:10px;padding:1px 6px;font-size:.68rem;font-weight:800;display:none;">0</span>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   VisionEnforce Radar — radar.js (inline for single-file deploy)
+   ═══════════════════════════════════════════════════════════════ */
+
+const API = '';
+let googleMap = null;
+let mapMarkers = {};          // camera_id → google.maps.Marker
+let riskData = [];            // latest risk score array
+let selectedCameraId = null;
+let wsConn = null;
+let refreshInterval = null;
+let simRunning = false;
+
+// ─── Color helpers ─────────────────────────────────────────────
+const LEVEL_COLORS = {
+  CRITICAL: { bg: '#dc2626', light: '#fef2f2', border: '#fca5a5', text: '#dc2626' },
+  HIGH:     { bg: '#ea580c', light: '#fff7ed', border: '#fed7aa', text: '#ea580c' },
+  MEDIUM:   { bg: '#ca8a04', light: '#fefce8', border: '#fde68a', text: '#ca8a04' },
+  LOW:      { bg: '#16a34a', light: '#f0fdf4', border: '#bbf7d0', text: '#16a34a' },
+};
+
+function levelColor(level) { return LEVEL_COLORS[level] || LEVEL_COLORS.LOW; }
+
+// ─── Google Maps init ──────────────────────────────────────────
+function initGoogleMap() {
+  if (!window.GMAPS_REAL) {
+    // Show embedded fallback iframe
+    document.getElementById('map-fallback').style.display = 'block';
+    document.getElementById('google-map').style.display = 'none';
+    console.info('[Radar] No real Maps API key — using embed fallback. Add key to GMAPS_KEY.');
+    return;
+  }
+
+  googleMap = new google.maps.Map(document.getElementById('google-map'), {
+    center: { lat: 12.9539, lng: 77.6000 },
+    zoom: 13,
+    mapId: 'DEMO_RADAR_MAP',
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    styles: [
+      { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+      { featureType: 'transit', stylers: [{ visibility: 'simplified' }] },
+    ]
+  });
+}
+
+// ─── Marker management ─────────────────────────────────────────
+function createMarkerContent(score, level) {
+  const c = levelColor(level);
+  const size = 32 + Math.min(24, score * 0.3);
+  return `
+    <div style="position:relative;width:${size}px;height:${size}px;cursor:pointer;">
+      <div style="
+        position:absolute;inset:0;border-radius:50%;
+        background:${c.bg};opacity:.18;
+        animation:pulse-ring 2s ease-out infinite;
+      "></div>
+      <div style="
+        position:absolute;inset:4px;border-radius:50%;
+        background:${c.bg};
+        border:3px solid #fff;
+        box-shadow:0 2px 14px ${c.bg}66;
+        display:flex;align-items:center;justify-content:center;
+        font-size:.7rem;font-weight:800;color:#fff;
+        font-family:Inter,sans-serif;
+        transition:transform .2s;
+      ">${Math.round(score)}</div>
+    </div>`;
+}
+
+function placeOrUpdateMarker(cam) {
+  if (!googleMap || !window.GMAPS_REAL) return;
+
+  const pos = { lat: cam.lat, lng: cam.lon };
+  const c   = levelColor(cam.level);
+
+  if (mapMarkers[cam.camera_id]) {
+    const m = mapMarkers[cam.camera_id];
+    m.setPosition(pos);
+    if (m._overlay) m._overlay.setContent(createMarkerContent(cam.score, cam.level));
+  } else {
+    // AdvancedMarkerElement if available, else fallback
+    try {
+      const pin = document.createElement('div');
+      pin.innerHTML = createMarkerContent(cam.score, cam.level);
+      const marker = new google.maps.marker.AdvancedMarkerElement({
+        map: googleMap, position: pos,
+        content: pin,
+        title: cam.landmark || cam.camera_name,
+      });
+      marker.addListener('click', () => showCameraDetail(cam.camera_id));
+      mapMarkers[cam.camera_id] = marker;
+      marker._overlay = marker.content;
+    } catch(e) {
+      // Fallback to classic marker
+      const marker = new google.maps.Marker({
+        map: googleMap, position: pos,
+        title: cam.landmark || cam.camera_name,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 14 + cam.score * 0.1,
+          fillColor: c.bg, fillOpacity: 0.9,
+          strokeColor: '#ffffff', strokeWeight: 2,
+        }
+      });
+      marker.addListener('click', () => showCameraDetail(cam.camera_id));
+      mapMarkers[cam.camera_id] = marker;
+    }
+  }
+}
+
+// ─── Risk Score Fetch & Render ─────────────────────────────────
+async function refreshRiskScores() {
+  try {
+    const res = await fetch(`${API}/api/risk/scores`);
+    const data = await res.json();
+    riskData = data.scores || [];
+    renderHotspotList(riskData);
+    riskData.forEach(cam => placeOrUpdateMarker(cam));
+    updateOverallRiskBadge(riskData);
+    document.getElementById('stripUpdated').textContent =
+      'Updated ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Dynamic map auto-focus
+    if (riskData.length && !window.mapCentered) {
+      if (window.GMAPS_REAL && googleMap) {
+        const bounds = new google.maps.LatLngBounds();
+        riskData.forEach(cam => {
+          if (cam.lat && cam.lon) {
+            bounds.extend({ lat: cam.lat, lng: cam.lon });
+          }
+        });
+        googleMap.fitBounds(bounds);
+      } else {
+        const hasRajshahi = riskData.some(cam => cam.camera_id.includes('VODRA') || cam.camera_id.includes('TALAIMARI'));
+        if (hasRajshahi) {
+          const iframe = document.getElementById('map-fallback');
+          if (iframe) {
+            iframe.src = "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d14545.981881768822!2d88.61864019999999!3d24.36621215!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39fc8c21bf811b7f%3A0xe54ef97b5e4063!2sRajshahi!5e0!3m2!1sen!2sbd!4v1718880000000!5m2!1sen!2sbd";
+          }
+        }
+      }
+      window.mapCentered = true;
+    }
+
+    // Also refresh pending review count
+    fetchPendingCount();
+  } catch(e) {
+    console.error('[Radar] Risk score fetch failed:', e);
+  }
+}
+
+function updateOverallRiskBadge(scores) {
+  const badge = document.getElementById('overallRiskBadge');
+  const sub   = document.getElementById('panelSubtitle');
+  if (!scores.length) return;
+
+  const maxScore = Math.max(...scores.map(s => s.score));
+  const maxCam   = scores.find(s => s.score === maxScore);
+  const level    = maxCam ? maxCam.level : 'LOW';
+  const c        = levelColor(level);
+
+  badge.textContent = level;
+  badge.style.background = c.light;
+  badge.style.color       = c.text;
+  badge.style.borderColor = c.border;
+
+  const highs = scores.filter(s => s.level === 'CRITICAL' || s.level === 'HIGH').length;
+  sub.textContent = highs > 0
+    ? `${highs} high-risk location${highs > 1 ? 's' : ''} detected`
+    : 'All locations within normal range';
+}
+
+function renderHotspotList(scores) {
+  const el = document.getElementById('hotspot-list');
+  if (!scores.length) {
+    el.innerHTML = `<div class="loading-state"><i class="fas fa-circle-check" style="color:var(--low);font-size:1.4rem;"></i><span>No cameras found. <a href="#" onclick="startSimulation();return false;" style="color:var(--brand);">Run simulation</a> to see data.</span></div>`;
+    return;
+  }
+
+  el.innerHTML = scores.map(cam => {
+    const c   = levelColor(cam.level);
+    const pct = cam.score.toFixed(0);
+    const f   = cam.factors;
+
+    // Build factor chips
+    const chips = [];
+    if (f.parking_long_duration > 0) chips.push(`🅿️ ${f.parking_long_duration} long-park`);
+    if (f.wrong_side > 0) chips.push(`⚠️ ${f.wrong_side} wrong-side`);
+    if (f.signal_violations > 0) chips.push(`🚦 ${f.signal_violations} signal`);
+    if (f.avg_vehicle_density > 6) chips.push(`🚗 density ${f.avg_vehicle_density}`);
+    if (f.peak_hour_multiplier > 1) chips.push(`⏰ peak ×${f.peak_hour_multiplier}`);
+
+    return `
+      <div class="risk-card ${cam.level}" id="rc-${cam.camera_id}" onclick="handleCardClick('${cam.camera_id}')">
+        <div class="risk-card-top">
+          <div>
+            <div class="risk-location">${cam.landmark || cam.camera_name}</div>
+            <div class="risk-cam-id">${cam.camera_id} · ${cam.is_active ? '🟢 online' : '⚫ offline'}</div>
+          </div>
+          <div class="risk-badge ${cam.level}">${cam.level}</div>
+        </div>
+
+        <div class="score-bar-wrap">
+          <div class="score-bar-top">
+            <span class="score-label">Risk Score</span>
+            <span class="score-value" style="color:${c.bg};">${pct}/100</span>
+          </div>
+          <div class="score-track">
+            <div class="score-fill ${cam.level}" style="width:${pct}%;"></div>
+          </div>
+        </div>
+
+        <div class="risk-explanation">${cam.explanation}</div>
+
+        ${cam.level !== 'LOW' ? `
+        <div class="risk-action">
+          <i class="fas fa-triangle-exclamation"></i>
+          <span>${cam.action}</span>
+        </div>` : ''}
+
+        ${chips.length ? `<div class="risk-factors">${chips.map(c => `<span class="factor-chip">${c}</span>`).join('')}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function handleCardClick(cameraId) {
+  showCameraDetail(cameraId);
+  switchTab('detail');
+}
+
+// ─── Camera Detail Panel ───────────────────────────────────────
+async function showCameraDetail(cameraId) {
+  selectedCameraId = cameraId;
+  const cam = riskData.find(c => c.camera_id === cameraId);
+  if (!cam) return;
+
+  const el      = document.getElementById('detail-panel-content');
+  const empty   = document.getElementById('detail-panel-empty');
+  const c       = levelColor(cam.level);
+  const f       = cam.factors;
+
+  // Fetch recent violations for this camera
+  let violations = [];
+  try {
+    const vres = await fetch(`${API}/api/violations?camera_id=${cameraId}&limit=5&status=PENDING_HUMAN`);
+    const vdata = await vres.json();
+    violations = vdata.items || [];
+  } catch(e) {}
+
+  empty.style.display = 'none';
+  el.style.display = 'block';
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:1rem;font-weight:800;color:var(--text-primary);letter-spacing:-.2px;">${cam.landmark || cam.camera_name}</div>
+          <div style="font-size:.72rem;color:var(--text-muted);font-family:monospace;margin-top:3px;">${cam.camera_id}</div>
+        </div>
+        <div class="risk-badge ${cam.level}" style="flex-shrink:0;">${cam.level}</div>
+      </div>
+
+      <!-- Video Feed Overlay -->
+      <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:var(--radius-sm); overflow:hidden; margin-bottom:16px;">
+        <img id="radarVideo" src="${API}/api/video_feed/${cameraId}" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null; this.src=''; this.alt='Video stream unavailable'; this.style.display='none'; document.getElementById('vid-fallback').style.display='flex';" />
+        <div id="vid-fallback" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; align-items:center; justify-content:center; color:#64748b; font-size:.8rem; flex-direction:column; gap:8px;">
+          <i class="fas fa-video-slash" style="font-size:2rem; opacity:.5;"></i>
+          <span>Stream Offline</span>
+        </div>
+        <div style="position:absolute; top:8px; left:8px; background:rgba(220,38,38,0.85); color:#fff; font-size:0.6rem; font-weight:800; padding:3px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:4px;">
+           <span style="width:6px;height:6px;background:#fff;border-radius:50%;display:inline-block;animation:pulseDot 1s infinite;"></span> REAL ML STREAM
+        </div>
+      </div>
+
+      <!-- Big score gauge -->
+      <div style="background:${c.light};border:1px solid ${c.border};border-radius:var(--radius-md);padding:16px;margin-bottom:12px;text-align:center;">
+        <div style="font-size:3rem;font-weight:900;color:${c.bg};letter-spacing:-2px;line-height:1;">
+          ${Math.round(cam.score)}
+        </div>
+        <div style="font-size:.72rem;color:${c.text};font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;">
+          Congestion Risk Score /100
+        </div>
+      </div>
+
+      <!-- Why section -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;">Why is this risky?</div>
+        <div style="font-size:.85rem;color:var(--text-primary);line-height:1.6;padding:12px;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+          ${cam.explanation}
+        </div>
+      </div>
+
+      <!-- Factor breakdown -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;">Score Factors</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          ${factorRow('Illegal Parking', f.parking_total, f.parking_long_duration + ' long-duration', '🅿️')}
+          ${factorRow('Wrong-Side', f.wrong_side, 'incidents', '⚠️')}
+          ${factorRow('Signal Jump', f.signal_violations, 'violations', '🚦')}
+          ${factorRow('Vehicle Density', f.avg_vehicle_density, 'vehicles/frame avg', '🚗')}
+          ${factorRow('Peak Hour Mult.', '×' + f.peak_hour_multiplier, '', '⏰')}
+          ${factorRow('Day Mult.', '×' + f.day_multiplier, '', '📅')}
+        </div>
+      </div>
+
+      <!-- Recommended action -->
+      <div style="background:var(--brand-light);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
+        <div style="font-size:.72rem;font-weight:700;color:var(--brand);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px;">
+          <i class="fas fa-bolt"></i> Recommended Action
+        </div>
+        <div style="font-size:.82rem;color:var(--text-primary);line-height:1.5;">${cam.action}</div>
+      </div>
+
+      ${violations.length ? `
+      <!-- Pending violations -->
+      <div>
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;">
+          Pending Review (${violations.length})
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${violations.map(v => violationMiniCard(v)).join('')}
+        </div>
+        <a href="review.html" style="display:block;text-align:center;margin-top:10px;font-size:.8rem;color:var(--brand);font-weight:600;text-decoration:none;">
+          Open Review Console →
+        </a>
+      </div>` : `
+      <div style="text-align:center;color:var(--text-muted);font-size:.82rem;padding:12px;">
+        <i class="fas fa-check-circle" style="color:var(--low);margin-right:5px;"></i>
+        No pending violations at this location
+      </div>`}
+    </div>`;
+
+  // Update config camera selector to match
+  document.getElementById('configCameraSelect').value = cameraId;
+  loadCameraConfig(cameraId);
+
+  // Pan map to camera if available
+  if (googleMap && window.GMAPS_REAL) {
+    googleMap.panTo({ lat: cam.lat, lng: cam.lon });
+    googleMap.setZoom(15);
+  }
+}
+
+function factorRow(label, val, sub, icon) {
+  return `
+    <div style="padding:10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+      <div style="font-size:1rem;margin-bottom:3px;">${icon}</div>
+      <div style="font-size:.88rem;font-weight:700;color:var(--text-primary);">${val}</div>
+      <div style="font-size:.68rem;color:var(--text-muted);">${label}</div>
+      ${sub ? `<div style="font-size:.65rem;color:var(--text-muted);">${sub}</div>` : ''}
+    </div>`;
+}
+
+function violationMiniCard(v) {
+  const typeLabel = {
+    'ILLEGAL_PARKING': '🅿️ Illegal Parking',
+    'WRONG_SIDE_DRIVING': '⚠️ Wrong Side',
+    'RED_LIGHT_VIOLATION': '🔴 Red Light',
+    'STOP_LINE_VIOLATION': '🛑 Stop Line',
+  }[v.violation_type] || v.violation_type;
+
+  const time = new Date(v.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const dur  = v.extra_metadata && v.extra_metadata.parking_duration_seconds
+    ? ` · ${Math.round(v.extra_metadata.parking_duration_seconds / 60)} min parked`
+    : '';
+
+  return `
+    <div style="padding:10px 12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <div>
+        <div style="font-size:.8rem;font-weight:600;color:var(--text-primary);">${typeLabel}${dur}</div>
+        <div style="font-size:.7rem;color:var(--text-muted);">${time} · ${v.vehicle_class || '—'} · ${v.license_plate || '—'}</div>
+      </div>
+      <span style="padding:3px 8px;border-radius:10px;font-size:.66rem;font-weight:700;background:var(--high-light);color:var(--high);border:1px solid var(--high-border);white-space:nowrap;">PENDING</span>
+    </div>`;
+}
+
+// ─── Tab switching ─────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('pane-' + tab).classList.add('active');
+}
+
+// ─── Config Panel ──────────────────────────────────────────────
+async function loadCameraConfig(cameraId) {
+  if (!cameraId) return;
+  try {
+    const res = await fetch(`${API}/api/config/zones/${cameraId}`);
+    if (!res.ok) return;
+    const cfg = await res.json();
+
+    const pSlider = document.getElementById('parkingThresholdSlider');
+    const wSlider = document.getElementById('windowSlider');
+
+    pSlider.value = cfg.parking_threshold_minutes || 5;
+    wSlider.value = cfg.risk_window_minutes || 30;
+
+    updateSliderDisplay(pSlider, 'parkingThresholdVal', ' min');
+    updateSliderDisplay(wSlider, 'windowSliderVal', ' min');
+
+    document.getElementById('config-form').style.display = 'block';
+    document.getElementById('config-placeholder').style.display = 'none';
+  } catch(e) {}
+}
+
+function updateSliderDisplay(slider, valId, suffix) {
+  const min = parseFloat(slider.min), max = parseFloat(slider.max), val = parseFloat(slider.value);
+  const pct = ((val - min) / (max - min) * 100).toFixed(1) + '%';
+  slider.style.setProperty('--pct', pct);
+  document.getElementById(valId).textContent = val + suffix;
+}
+
+async function saveZoneConfig() {
+  const cameraId = document.getElementById('configCameraSelect').value;
+  if (!cameraId) { showToast('Select a camera first', '', 'MEDIUM'); return; }
+
+  const body = {
+    parking_threshold_minutes: parseFloat(document.getElementById('parkingThresholdSlider').value),
+    risk_window_minutes: parseInt(document.getElementById('windowSlider').value),
+  };
+
+  const btn = document.getElementById('configSaveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Saving…';
+
+  try {
+    const res = await fetch(`${API}/api/config/zones/${cameraId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) throw new Error('Save failed');
+    document.getElementById('configSuccess').style.display = 'flex';
+    setTimeout(() => { document.getElementById('configSuccess').style.display = 'none'; }, 4000);
+    showToast('Config saved', `Parking threshold set to ${body.parking_threshold_minutes} min for ${cameraId}`, 'success');
+    refreshRiskScores();
+  } catch(e) {
+    showToast('Save failed', e.message, 'CRITICAL');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Save Configuration';
+  }
+}
+
+// ─── Config camera selector ────────────────────────────────────
+function populateCameraSelector(scores) {
+  const sel = document.getElementById('configCameraSelect');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select a camera…</option>';
+  scores.forEach(cam => {
+    const opt = document.createElement('option');
+    opt.value = cam.camera_id;
+    opt.textContent = `${cam.landmark || cam.camera_name} (${cam.camera_id})`;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
+}
+
+document.getElementById('configCameraSelect').addEventListener('change', function() {
+  if (this.value) {
+    loadCameraConfig(this.value);
+    selectedCameraId = this.value;
+  } else {
+    document.getElementById('config-form').style.display = 'none';
+    document.getElementById('config-placeholder').style.display = 'block';
+  }
+});
+
+// ─── Simulation ────────────────────────────────────────────────
+async function startSimulation() {
+  if (simRunning) { showToast('Already running', 'Simulation is in progress…', 'MEDIUM'); return; }
+  const btn = document.getElementById('startSimBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;color:#fff;border-top-color:#fff;border-color:rgba(255,255,255,.3);border-top-color:#fff;"></div> Running…';
+
+  try {
+    const res = await fetch(`${API}/api/demo/start`, { method: 'POST' });
+    if (res.ok) {
+      simRunning = true;
+      showToast('Simulation started', 'Generating 35 violation events across 5 cameras…', 'success');
+      // Poll for completion
+      const pollInterval = setInterval(async () => {
+        const st = await fetch(`${API}/api/demo/status`).then(r => r.json()).catch(() => null);
+        if (st && st.status !== 'processing') {
+          clearInterval(pollInterval);
+          simRunning = false;
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-play"></i> Run Simulation';
+          showToast('Simulation complete', `${st.violations || ''} violations generated. Risk scores updating…`, 'success');
+          refreshRiskScores();
+        }
+      }, 3000);
+    }
+  } catch(e) {
+    showToast('Start failed', e.message, 'CRITICAL');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-play"></i> Run Simulation';
+  }
+}
+
+// ─── WebSocket ─────────────────────────────────────────────────
+function connectWebSocket() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  wsConn = new WebSocket(`${proto}://${location.host}/ws/live`);
+
+  wsConn.onopen = () => {
+    document.getElementById('wsDot').classList.add('connected');
+    document.getElementById('wsStatus').textContent = 'Live';
+  };
+
+  wsConn.onmessage = (evt) => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'violation_event') {
+        // Refresh risk scores on new violation
+        clearTimeout(window._riskDebounce);
+        window._riskDebounce = setTimeout(refreshRiskScores, 1500);
+
+        // Show toast for critical violations
+        const d = msg.data;
+        if (d.violation_type === 'ILLEGAL_PARKING' || d.violation_type === 'WRONG_SIDE_DRIVING') {
+          const dur = d.extra && d.extra.parking_duration_seconds
+            ? ` (${Math.round(d.extra.parking_duration_seconds / 60)}m parked)`
+            : '';
+          showToast(
+            d.violation_label + dur,
+            `${d.camera_name} · ${d.vehicle_class} · ${d.license_plate || '—'}`,
+            d.severity
+          );
+        }
+      }
+    } catch(e) {}
+  };
+
+  wsConn.onclose = () => {
+    document.getElementById('wsDot').classList.remove('connected');
+    document.getElementById('wsStatus').textContent = 'Reconnecting…';
+    setTimeout(connectWebSocket, 3000);
+  };
+
+  wsConn.onerror = () => { wsConn.close(); };
+}
+
+// ─── Pending count badge ───────────────────────────────────────
+async function fetchPendingCount() {
+  try {
+    const res = await fetch(`${API}/api/violations?status=PENDING_HUMAN&limit=1`);
+    const data = await res.json();
+    const badge = document.getElementById('pendingBadge');
+    const count = data.total || 0;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+// ─── Toast helper ──────────────────────────────────────────────
+function showToast(title, msg, level) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${level}`;
+
+  const icon = { CRITICAL:'fa-circle-exclamation', HIGH:'fa-triangle-exclamation',
+                 MEDIUM:'fa-circle-info', LOW:'fa-circle-check', success:'fa-circle-check' }[level] || 'fa-circle-info';
+  const icolor = level === 'success' ? 'var(--low)' :
+                 level === 'CRITICAL' ? 'var(--critical)' :
+                 level === 'HIGH' ? 'var(--high)' :
+                 level === 'MEDIUM' ? 'var(--medium)' : 'var(--brand)';
+
+  toast.innerHTML = `
+    <i class="fas ${icon}" style="color:${icolor};flex-shrink:0;margin-top:1px;"></i>
+    <div>
+      <div class="toast-title">${title}</div>
+      ${msg ? `<div class="toast-msg">${msg}</div>` : ''}
+    </div>`;
+
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = 'opacity .4s, transform .4s';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    setTimeout(() => toast.remove(), 400);
+  }, 5000);
+}
+
+// ─── Refresh button ─────────────────────────────────────────────
+document.getElementById('refreshBtn').addEventListener('click', refreshRiskScores);
+
+// ─── Init ───────────────────────────────────────────────────────
+async function init() {
+  initGoogleMap();
+  connectWebSocket();
+  await refreshRiskScores();
+  populateCameraSelector(riskData);
+
+  // Auto-refresh every 30 seconds
+  refreshInterval = setInterval(async () => {
+    await refreshRiskScores();
+    populateCameraSelector(riskData);
+  }, 30000);
+
+  // If any HIGH/CRITICAL locations, auto-open the first one
+  const topRisk = riskData.find(c => c.level === 'CRITICAL' || c.level === 'HIGH');
+  if (topRisk) {
+    setTimeout(() => showCameraDetail(topRisk.camera_id), 800);
+  }
+}
+
+// Google Maps callback
+function mapsCallback() {
+  init();
+}
+
+// Start init either after Maps loads or immediately if no key
+if (window.GMAPS_REAL) {
+  // Maps API will call mapsCallback
+} else {
+  // No key — init directly (fallback iframe already shown)
+  document.addEventListener('DOMContentLoaded', () => setTimeout(init, 200));
+}
+</script>
+
+<!-- Google Maps JS API (only loads if key is real) -->
+<script>
+if (window.GMAPS_REAL) {
+  const s = document.createElement('script');
+  s.src = `https://maps.googleapis.com/maps/api/js?key=${window.GMAPS_KEY}&libraries=marker&callback=mapsCallback&loading=async`;
+  s.async = true; s.defer = true;
+  document.head.appendChild(s);
+}
+</script>
+
+<style>
+  /* Pulse ring animation for markers */
+  @keyframes pulse-ring {
+    0%   { transform: scale(0.85); opacity: 0.9; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+</style>
+
+</body>
+</html>

@@ -1,0 +1,44 @@
+# Large video files (too large for GitHub — share separately)
+*.mp4
+Vodra/
+Talaimari/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.venv/
+venv/
+env/
+
+# Model weights (large binary files — commit only the ONNX model)
+yolov8n.pt
+yolov8n.onnx
+
+# Database
+visionenforce.db
+
+# Evidence captures (runtime generated)
+evidence/
+
+# Environment / IDE
+.env
+.env.*
+.vscode/
+.idea/
+*.DS_Store
+
+# Logs
+*.log
+
+# Demo / test videos (optional — comment out if you want to include)
+# parking.mp4
+# demo_traffic.mp4
+# intersection.mp4

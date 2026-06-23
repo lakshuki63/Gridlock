@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VisionEnforce — Officer Review Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/light.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    .review-thumb-container {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      position: relative;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+    }
+    .review-thumb-container img, .review-thumb-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .modal-two-col {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .modal-two-col {
+        grid-template-columns: 1fr;
+      }
+    }
+    .review-card-conf {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 3px 7px;
+      border-radius: 12px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      z-index: 2;
+    }
+    .review-card-conf.high { background: rgba(34,197,94,0.85); color: #fff; }
+    .review-card-conf.medium { background: rgba(234,179,8,0.85); color: #000; }
+    .review-card-conf.low { background: rgba(239,68,68,0.85); color: #fff; }
+    
+    .pagination-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAVBAR ═══ -->
+<nav class="navbar">
+  <a href="index.html" class="logo">
+    <div class="logo-icon">
+      <i class="fas fa-eye" style="color:#fff;"></i>
+    </div>
+    <span class="gradient-text">VisionEnforce</span>
+  </a>
+
+  <ul class="nav-links">
+    <li><a href="radar.html"><i class="fas fa-map-location-dot"></i> Radar</a></li>
+    <li><a href="/interactive"><i class="fas fa-draw-polygon"></i> Interactive</a></li>
+    <li><a href="monitor.html"><i class="fas fa-satellite-dish"></i> Monitor</a></li>
+    <li><a href="review.html" class="active"><i class="fas fa-user-shield"></i> Review</a></li>
+    <li><a href="analytics.html"><i class="fas fa-chart-line"></i> Analytics</a></li>
+  </ul>
+
+  <div class="nav-right">
+    <div id="wsIndicator" class="ws-indicator">
+      <div class="ws-dot"></div>
+      <span id="wsStatus">Connecting…</span>
+    </div>
+    <div class="officer-chip" id="officerChip">
+      <div class="officer-avatar" id="officerInitials">OF</div>
+      <span id="officerLabel">OFF-001</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ MAIN LAYOUT ═══ -->
+<div class="page-layout">
+  
+  <!-- LEFT SIDEBAR: Search & Filters -->
+  <aside class="sidebar">
+    <div class="section-title mb-2"><i class="fas fa-filter"></i> Filter Incidents</div>
+    
+    <div class="form-group">
+      <label class="form-label" for="searchPlate">Search License Plate</label>
+      <input type="text" id="searchPlate" class="input" placeholder="e.g. KA05AB1234..." />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="filterCamera">Camera Location</label>
+      <select id="filterCamera" class="select">
+        <option value="">All Cameras</option>
+        <option value="CAM-DEMO-01">KR Circle — North Entry</option>
+        <option value="CAM-DEMO-02">Silk Board Junction — East</option>
+        <option value="CAM-DEMO-03">MG Road Signal — West</option>
+        <option value="CAM-DEMO-04">Koramangala 5th Block</option>
+        <option value="CAM-DEMO-05">Indiranagar 100 Ft Road</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="filterType">Violation Type</label>
+      <select id="filterType" class="select">
+        <option value="">All Violations</option>
+        <option value="RED_LIGHT_VIOLATION">Red Light Violation</option>
+        <option value="STOP_LINE_VIOLATION">Stop Line Violation</option>
+        <option value="WRONG_SIDE_DRIVING">Wrong Side Driving</option>
+        <option value="ILLEGAL_PARKING">Illegal Parking</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="filterStatus">Review Status</label>
+      <select id="filterStatus" class="select">
+        <option value="PENDING_HUMAN">Pending Review</option>
+        <option value="APPROVED">Approved / Challan Issued</option>
+        <option value="REJECTED">Rejected / False Positive</option>
+        <option value="AUTO_PROCESSED">Auto-Processed</option>
+        <option value="">All Logs</option>
+      </select>
+    </div>
+
+    <div class="divider"></div>
+    
+    <div class="form-group" style="margin-bottom:0;">
+      <button class="btn btn-primary w-full" id="btnApplyFilters">
+        <i class="fas fa-search"></i> Apply Filters
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="main-content flex flex-col">
+    
+    <!-- HEADER -->
+    <div class="section-header">
+      <div>
+        <h2 style="font-size:1.35rem;font-weight:800;letter-spacing:-0.5px;">Officer Verification Console</h2>
+        <p style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px;">Confirm AI detections to initiate challan generation</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" id="btnRefresh">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- BATCH TOOLBAR -->
+    <div class="batch-toolbar hidden" id="batchToolbar">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;">
+        <input type="checkbox" id="selectAllCheckbox" style="cursor:pointer;" />
+        <span style="font-size:0.82rem;font-weight:600;" id="batchCountText">0 items selected</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-success btn-sm" id="btnBatchApprove"><i class="fas fa-check"></i> Approve Selection</button>
+        <button class="btn btn-danger btn-sm" id="btnBatchReject"><i class="fas fa-xmark"></i> Reject Selection</button>
+      </div>
+    </div>
+
+    <!-- CARDS GRID -->
+    <div class="evidence-grid" id="reviewGrid" style="flex:1; overflow-y:auto; align-content:start;">
+      <!-- Skeletons will show here dynamically -->
+    </div>
+
+    <!-- PAGINATION -->
+    <div class="pagination-bar">
+      <span style="font-size:0.78rem;color:var(--text-secondary);" id="paginationText">Showing 0-0 of 0 entries</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-sm" id="btnPrevPage" disabled><i class="fas fa-chevron-left"></i> Previous</button>
+        <button class="btn btn-ghost btn-sm" id="btnNextPage" disabled>Next <i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══ DETAILED REVIEW MODAL ═══ -->
+<div class="modal-overlay hidden" id="reviewModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h3 id="mdTitle" style="font-size:1.1rem;font-weight:800;letter-spacing:-0.3px;">RED_LIGHT_VIOLATION</h3>
+        <p id="mdId" style="font-size:0.71rem;color:var(--text-muted);font-family:monospace;margin-top:2px;">EVD-2026-BLR-XXXXXXXX</p>
+      </div>
+      <button class="modal-close" id="modalClose"><i class="fas fa-xmark"></i></button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="modal-two-col">
+        
+        <!-- Left: Image & Video Player -->
+        <div>
+          <div class="review-thumb-container" id="mdMediaContainer">
+            <!-- Image or Video dynamically loaded here -->
+            <img src="" id="mdFrameImage" alt="Violation Frame" />
+          </div>
+          
+          <div style="display:flex;justify-content:center;gap:10px;">
+            <button class="btn btn-ghost btn-sm" id="btnToggleMedia" disabled>
+              <i class="fas fa-film"></i> Load Video Clip
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Verification Form -->
+        <div class="flex flex-col gap-2">
+          
+          <!-- BTP e-Challan Plate Edit Field -->
+          <div class="card" style="padding:14px;border-color:rgba(0,212,255,0.15)">
+            <div class="form-group" style="margin-bottom:8px;">
+              <label class="form-label" for="mdPlateInput" style="color:var(--cyan);font-weight:700;"><i class="fas fa-keyboard"></i> Verified License Plate</label>
+              <input type="text" id="mdPlateInput" class="input" style="font-family:monospace;font-size:1.15rem;font-weight:700;letter-spacing:1px;text-align:center;text-transform:uppercase;" />
+            </div>
+            <div style="display:flex;justify-content:between;align-items:center;font-size:0.7rem;color:var(--text-muted);">
+              <span>AI confidence: <strong id="mdPlateConfVal">0%</strong></span>
+              <span id="mdRTOStatus" class="badge badge-green">Valid RTO Format</span>
+            </div>
+          </div>
+
+          <!-- Attributes Grid -->
+          <div class="card" style="padding:14px;">
+            <div class="meta-grid">
+              <div>
+                <div class="meta-key">Vehicle Type</div>
+                <div class="meta-val" id="mdVehicleClass">—</div>
+              </div>
+              <div>
+                <div class="meta-key">Camera Location</div>
+                <div class="meta-val" id="mdCameraName">—</div>
+              </div>
+              <div>
+                <div class="meta-key">Violation Type</div>
+                <div class="meta-val" id="mdViolationType">—</div>
+              </div>
+              <div>
+                <div class="meta-key">Detection Time</div>
+                <div class="meta-val" id="mdTime">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Confidence Scores -->
+          <div class="card" style="padding:14px;">
+            <div class="form-label" style="font-size:0.69rem;">Confidence Breakdown</div>
+            
+            <div class="mb-2">
+              <div style="display:flex;justify-content:space-between;font-size:0.71rem;color:var(--text-secondary);margin-bottom:2px;">
+                <span>Vehicle Detection</span>
+                <span id="mdDetConfVal">0%</span>
+              </div>
+              <div class="confidence-bar-wrap">
+                <div class="confidence-bar-track"><div class="confidence-bar-fill" id="mdDetConfBar"></div></div>
+              </div>
+            </div>
+
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:0.71rem;color:var(--text-secondary);margin-bottom:2px;">
+                <span>Violation Logic</span>
+                <span id="mdViolConfVal">0%</span>
+              </div>
+              <div class="confidence-bar-wrap">
+                <div class="confidence-bar-track"><div class="confidence-bar-fill" id="mdViolConfBar"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label" for="mdNotes">Officer Notes</label>
+            <textarea id="mdNotes" rows="2" class="input" placeholder="e.g. Plate verified against vehicle attributes..."></textarea>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <span style="margin-right:auto;font-size:0.74rem;color:var(--text-muted);" id="mdProvenanceHash">sha256:...</span>
+      <button class="btn btn-ghost" id="btnModalClose">Cancel</button>
+      <button class="btn btn-danger" id="btnReject"><i class="fas fa-xmark"></i> Reject (False Positive)</button>
+      <button class="btn btn-success" id="btnApprove"><i class="fas fa-check"></i> Approve & Issue Challan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- JS imports -->
+<script src="js/review.js"></script>
+</body>
+</html>

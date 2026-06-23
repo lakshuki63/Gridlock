@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VisionEnforce — Live Monitoring</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/light.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .feed-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+      flex-shrink: 0;
+    }
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(220,38,38,0.10); color: var(--critical);
+      border: 1px solid rgba(220,38,38,0.25);
+      padding: 3px 9px; border-radius: 20px;
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    }
+    .live-badge span { width: 6px; height: 6px; border-radius: 50%; background: var(--critical); display: inline-block; animation: pulse-dot 1.2s ease-in-out infinite; }
+    .cam-panel { flex: 0 0 auto; }
+    .chart-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .donut-wrap { display: flex; align-items: center; gap: 16px; flex: 1; min-height: 0; }
+    .donut-wrap canvas { max-width: 140px !important; max-height: 140px !important; }
+    #proc-progress-wrap { display: none; }
+    .vehicle-icon { font-size: 0.9rem; }
+    .violation-title { font-size: 0.85rem; font-weight: 700; }
+    .violation-id { font-size: 0.68rem; color: var(--text-muted); font-family: monospace; }
+    .cam-section { overflow: hidden; flex-shrink: 0; }
+    .cam-section .cam-list { max-height: 220px; overflow-y: auto; }
+    .kpi-separator { width: 1px; background: var(--border); margin: 0 2px; }
+
+    /* Monitor-specific overrides for violation cards */
+    .violation-card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .violation-card-meta {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      font-size: .75rem; color: var(--text-secondary); margin-bottom: 8px;
+    }
+    .plate-badge {
+      font-family: monospace; font-weight: 700; font-size: .78rem;
+      background: var(--bg-tertiary); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; color: var(--text-primary);
+    }
+    .violation-card-footer {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .confidence-bar-wrap {
+      display: flex; align-items: center; gap: 6px; font-size: .72rem;
+    }
+    .confidence-bar-track {
+      flex: 1; height: 5px; background: var(--bg-tertiary);
+      border-radius: 3px; overflow: hidden; border: 1px solid var(--border);
+    }
+    .confidence-bar-fill {
+      height: 100%; border-radius: 3px;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+    }
+    .confidence-bar-fill.high   { background: var(--green); }
+    .confidence-bar-fill.medium { background: var(--medium); }
+    .confidence-bar-fill.low    { background: var(--critical); }
+    .confidence-val { font-weight: 600; color: var(--text-secondary); min-width: 36px; }
+
+    .severity-critical .violation-card-header .badge { background: var(--critical-light); color: var(--critical); border: 1px solid var(--critical-border); }
+    .severity-high .violation-card-header .badge { background: var(--high-light); color: var(--high); border: 1px solid var(--high-border); }
+    .severity-medium .violation-card-header .badge { background: var(--medium-light); color: var(--medium); border: 1px solid var(--medium-border); }
+    .severity-low .violation-card-header .badge { background: var(--low-light); color: var(--low); border: 1px solid var(--low-border); }
+
+    @keyframes pulse-dot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50% { opacity:.5; transform:scale(.85); }
+    }
+
+    /* Toast body for old code compatibility */
+    .toast-body .toast-msg { color: var(--text-secondary); font-size: .8rem; }
+    .toast-close { margin-left: auto; cursor: pointer; opacity: .5; font-size: .85rem; }
+    .toast-close:hover { opacity: 1; }
+    .toast.info { border-left: 3px solid var(--brand); }
+    .toast.critical { border-left: 3px solid var(--critical); }
+    .toast.high { border-left: 3px solid var(--high); }
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.removing { opacity: 0; transform: translateX(20px); transition: all .32s; }
+
+    /* camera-item from old CSS */
+    .camera-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg-primary);
+      transition: all .15s; margin-bottom: 5px;
+    }
+    .camera-item:hover { background: var(--bg-hover); }
+    .cam-name { font-size: .8rem; font-weight: 600; color: var(--text-primary); }
+    .cam-detail { font-size: .7rem; color: var(--text-muted); margin-top: 1px; }
+    .cam-count { margin-left: auto; font-size: .85rem; font-weight: 700; color: var(--text-primary); }
+    .cam-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .cam-status-dot.online { background: var(--green); }
+    .cam-status-dot.offline { background: #94a3b8; }
+    .cam-status-dot.warning { background: var(--medium); }
+
+    /* Badge generic */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 12px; font-size: .7rem; font-weight: 700; }
+    .badge-red { background: var(--critical-light); color: var(--critical); border: 1px solid var(--critical-border); }
+    .badge-orange { background: var(--high-light); color: var(--high); border: 1px solid var(--high-border); }
+    .badge-yellow { background: var(--medium-light); color: var(--medium); border: 1px solid var(--medium-border); }
+    .badge-green { background: var(--low-light); color: var(--green); border: 1px solid var(--low-border); }
+    .badge-gray { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border); }
+
+    /* violation card animation */
+    @keyframes cardSlideIn {
+      from { transform: translateY(-12px); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+    .violation-card { animation: cardSlideIn .3s ease; }
+
+    /* empty state */
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 48px; color: var(--text-muted); text-align: center; }
+    .empty-state i { font-size: 2.5rem; opacity: .3; }
+    .empty-state p { font-size: .875rem; max-width: 280px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAVBAR ═══ -->
+<nav class="navbar">
+  <a href="radar.html" class="logo">
+    <div class="logo-icon">
+      <i class="fas fa-satellite-dish" style="color:#fff;"></i>
+    </div>
+    <span style="font-size:1.1rem;font-weight:800;background:linear-gradient(135deg,#2563eb,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">VisionEnforce</span>
+  </a>
+
+  <ul class="nav-links">
+    <li><a href="radar.html"><i class="fas fa-map-location-dot"></i> Radar</a></li>
+    <li><a href="/interactive"><i class="fas fa-draw-polygon"></i> Interactive</a></li>
+    <li><a href="monitor.html" class="active"><i class="fas fa-satellite-dish"></i> Monitor</a></li>
+    <li><a href="review.html"><i class="fas fa-user-shield"></i> Review</a></li>
+    <li><a href="analytics.html"><i class="fas fa-chart-line"></i> Analytics</a></li>
+  </ul>
+
+  <div class="nav-right">
+    <div id="wsIndicator" class="ws-chip">
+      <div class="ws-dot" id="wsDot2"></div>
+      <span id="wsStatus">Connecting…</span>
+    </div>
+    <div class="officer-chip" id="officerChip">
+      <div class="officer-avatar" id="officerInitials">RK</div>
+      <span id="officerLabel">OFF-001</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ KPI TILES ═══ -->
+<div class="dashboard-body">
+  <div class="dashboard-kpi">
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon cyan"><i class="fas fa-bolt"></i></div>
+        <div class="kpi-info">
+          <div class="kpi-value" id="kpiTotal">—</div>
+          <div class="kpi-label">Total Today</div>
+          <div class="kpi-delta up" id="kpiTotalDelta"><i class="fas fa-arrow-up"></i> loading…</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon orange"><i class="fas fa-hourglass-half"></i></div>
+        <div class="kpi-info">
+          <div class="kpi-value" id="kpiPending">—</div>
+          <div class="kpi-label">Pending Review</div>
+          <div class="kpi-delta" id="kpiPendingDelta" style="color:var(--text-muted)"><i class="fas fa-clock"></i> awaiting</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon green"><i class="fas fa-robot"></i></div>
+        <div class="kpi-info">
+          <div class="kpi-value" id="kpiAuto">—</div>
+          <div class="kpi-label">Auto-Processed</div>
+          <div class="kpi-delta up" id="kpiAutoDelta"><i class="fas fa-arrow-up"></i> loading…</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon purple"><i class="fas fa-camera"></i></div>
+        <div class="kpi-info">
+          <div class="kpi-value" id="kpiCameras">—</div>
+          <div class="kpi-label">Active Cameras</div>
+          <div class="kpi-delta" id="kpiCamerasDelta" style="color:var(--text-muted)"><i class="fas fa-wifi"></i> online</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon red"><i class="fas fa-triangle-exclamation"></i></div>
+        <div class="kpi-info">
+          <div class="kpi-value" id="kpiFPR">—</div>
+          <div class="kpi-label">False Positive Rate</div>
+          <div class="kpi-delta down" id="kpiFPRDelta"><i class="fas fa-arrow-down"></i> loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MAIN CONTENT ═══ -->
+  <div class="dashboard-main">
+
+    <!-- LEFT: Violation Feed -->
+    <div class="feed-panel">
+      <div class="feed-panel-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="section-title"><i class="fas fa-satellite-dish"></i> Live Violation Feed</div>
+          <div class="live-badge"><span></span> LIVE</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select class="select" id="feedFilter" style="width:auto;padding:5px 10px;font-size:0.78rem;">
+            <option value="">All Types</option>
+            <option value="RED_LIGHT_VIOLATION">Red Light</option>
+            <option value="STOP_LINE_VIOLATION">Stop Line</option>
+            <option value="WRONG_SIDE_DRIVING">Wrong Side</option>
+            <option value="ILLEGAL_PARKING">Illegal Parking</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="clearFeedBtn"><i class="fas fa-trash-can"></i> Clear</button>
+        </div>
+      </div>
+
+      <div class="feed-scroll" id="violationFeed">
+        <!-- Skeleton loaders -->
+        <div class="violation-card" style="cursor:default;">
+          <div class="skeleton" style="height:14px;width:40%;margin-bottom:8px;"></div>
+          <div class="skeleton" style="height:10px;width:70%;margin-bottom:6px;"></div>
+          <div class="skeleton" style="height:4px;width:100%;"></div>
+        </div>
+        <div class="violation-card" style="cursor:default;">
+          <div class="skeleton" style="height:14px;width:55%;margin-bottom:8px;"></div>
+          <div class="skeleton" style="height:10px;width:60%;margin-bottom:6px;"></div>
+          <div class="skeleton" style="height:4px;width:100%;"></div>
+        </div>
+        <div class="violation-card" style="cursor:default;">
+          <div class="skeleton" style="height:14px;width:35%;margin-bottom:8px;"></div>
+          <div class="skeleton" style="height:10px;width:75%;margin-bottom:6px;"></div>
+          <div class="skeleton" style="height:4px;width:100%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Camera Status + Donut Chart -->
+    <div class="right-panel">
+
+      <!-- Camera Status -->
+      <div class="card cam-section" style="flex-shrink:0;">
+        <div class="section-header">
+          <div class="section-title"><i class="fas fa-camera"></i> Camera Status</div>
+          <span id="camOnlineCount" class="badge badge-green">— online</span>
+        </div>
+        <div class="cam-list" id="cameraList">
+          <div class="loading-state" style="padding:20px;">
+            <div class="spinner"></div>
+            <span>Loading cameras…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Violation Type Donut -->
+      <div class="card chart-panel" style="flex:1;min-height:220px;">
+        <div class="section-header">
+          <div class="section-title"><i class="fas fa-chart-pie"></i> Violation Breakdown</div>
+          <button class="btn btn-ghost btn-sm" id="refreshChartBtn"><i class="fas fa-sync-alt"></i></button>
+        </div>
+        <div class="donut-wrap">
+          <div style="position:relative;flex-shrink:0;">
+            <canvas id="donutChart" width="140" height="140"></canvas>
+          </div>
+          <div class="donut-legend" id="donutLegend">
+            <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div><span>Red Light</span><span class="legend-val" id="leg-rl">—</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f97316;"></div><span>Stop Line</span><span class="legend-val" id="leg-sl">—</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:#dc2626;"></div><span>Wrong Side</span><span class="legend-val" id="leg-ws">—</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:#eab308;"></div><span>Parking</span><span class="legend-val" id="leg-pk">—</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ STATUS BAR ═══ -->
+  <div class="status-bar">
+    <div class="status-item">
+      <i class="fas fa-microchip" style="color:var(--brand);"></i>
+      Processing: <strong id="procStatus">Idle</strong>
+    </div>
+    <div id="proc-progress-wrap" class="status-item" style="gap:8px;flex:1;max-width:260px;">
+      <div class="progress-track" style="flex:1;">
+        <div class="progress-fill" id="procProgress" style="width:0%;"></div>
+      </div>
+      <strong id="procPct">0%</strong>
+    </div>
+    <div class="status-item">
+      <i class="fas fa-server" style="color:var(--purple);"></i>
+      Frames/sec: <strong id="fpsStat">—</strong>
+    </div>
+    <div class="status-item">
+      <i class="fas fa-clock" style="color:var(--orange);"></i>
+      Latency: <strong id="latStat">—</strong>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+      <button class="btn btn-ghost btn-sm" id="demoStatusBtn"><i class="fas fa-info-circle"></i> Status</button>
+      <button class="btn btn-primary btn-sm" id="startDemoBtn"><i class="fas fa-play"></i> Start Demo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST CONTAINER ═══ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══ VIOLATION DETAIL MODAL ═══ -->
+<div class="modal-overlay hidden" id="violationModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h3 id="modalTitle" style="font-size:1rem;">Violation Detail</h3>
+        <div class="violation-id" id="modalId"></div>
+      </div>
+      <button class="modal-close" id="modalClose"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="meta-grid" style="margin-bottom:16px;">
+        <div class="meta-item"><div class="meta-key">Violation Type</div><div class="meta-val" id="mdType">—</div></div>
+        <div class="meta-item"><div class="meta-key">Severity</div><div class="meta-val" id="mdSeverity">—</div></div>
+        <div class="meta-item"><div class="meta-key">License Plate</div><div class="meta-val font-mono" id="mdPlate">—</div></div>
+        <div class="meta-item"><div class="meta-key">Vehicle Class</div><div class="meta-val" id="mdVehicle">—</div></div>
+        <div class="meta-item"><div class="meta-key">Camera</div><div class="meta-val" id="mdCamera">—</div></div>
+        <div class="meta-item"><div class="meta-key">Timestamp</div><div class="meta-val" id="mdTime">—</div></div>
+        <div class="meta-item"><div class="meta-key">Location</div><div class="meta-val" id="mdLocation">—</div></div>
+        <div class="meta-item"><div class="meta-key">Review Status</div><div class="meta-val" id="mdReviewStatus">—</div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="section-title" style="margin-bottom:10px;"><i class="fas fa-chart-bar"></i> Confidence Scores</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:0.75rem;color:var(--text-secondary);">
+            <span>Detection Confidence</span><span id="mdDetConf">—</span>
+          </div>
+          <div class="confidence-bar-track" style="height:6px;"><div class="confidence-bar-fill" id="mdDetConfBar" style="width:0%;"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:0.75rem;color:var(--text-secondary);">
+            <span>Violation Confidence</span><span id="mdViolConf">—</span>
+          </div>
+          <div class="confidence-bar-track" style="height:6px;"><div class="confidence-bar-fill" id="mdViolConfBar" style="width:0%;"></div></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:0.75rem;color:var(--text-secondary);">
+            <span>OCR / Plate Confidence</span><span id="mdPlateConf">—</span>
+          </div>
+          <div class="confidence-bar-track" style="height:6px;"><div class="confidence-bar-fill" id="mdPlateConfBar" style="width:0%;"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="mdRejectBtn"><i class="fas fa-xmark"></i> Reject</button>
+      <button class="btn btn-success btn-sm" id="mdApproveBtn"><i class="fas fa-check"></i> Approve</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/dashboard.js"></script>
+</body>
+</html>

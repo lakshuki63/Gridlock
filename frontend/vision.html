@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VisionEnforce - Traffic Detection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      #canvas-container {
+        position: relative;
+        display: inline-block;
+      }
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: crosshair;
+      }
+      img#video-stream {
+        display: block;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 text-gray-800 font-sans h-screen flex flex-col">
+    <nav class="bg-white shadow p-4 mb-4 flex justify-between items-center">
+      <div class="text-xl font-bold text-blue-600">VisionEnforce Prototype</div>
+      <div class="space-x-4">
+        <a href="radar.html" class="text-gray-600 hover:text-blue-500"
+          >Radar Dashboard</a
+        >
+        <a
+          href="vision.html"
+          class="text-blue-600 font-semibold border-b-2 border-blue-600"
+          >Violation Detection</a
+        >
+      </div>
+    </nav>
+
+    <div class="flex-1 flex overflow-hidden p-4 gap-6">
+      <!-- Left Panel: Video & Canvas -->
+      <div
+        class="flex-1 bg-white rounded-lg shadow p-4 flex flex-col items-center"
+      >
+        <h2 class="text-lg font-bold mb-4">Video Stream / Frame</h2>
+        <div
+          id="canvas-container"
+          class="border border-gray-300 bg-gray-200"
+          style="width: 640px; height: 360px"
+        >
+          <img
+            id="video-stream"
+            src=""
+            alt="Video frame"
+            style="width: 640px; height: 360px; object-fit: cover"
+          />
+          <canvas id="overlay-canvas" width="640" height="360"></canvas>
+        </div>
+      </div>
+
+      <!-- Right Panel: Controls -->
+      <div class="w-96 bg-white rounded-lg shadow p-4 flex flex-col">
+        <h2 class="text-lg font-bold mb-4 border-b pb-2">Controls</h2>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-1">Select Video</label>
+          <select
+            id="video-select"
+            class="w-full border rounded p-2 text-sm focus:ring focus:ring-blue-200"
+          >
+            <option value="parking.mp4">parking.mp4</option>
+            <option value="demo_traffic.mp4">demo_traffic.mp4</option>
+            <option value="intersection.mp4">intersection.mp4</option>
+          </select>
+        </div>
+
+        <button
+          id="load-frame-btn"
+          class="w-full bg-blue-500 text-white rounded p-2 mb-4 hover:bg-blue-600 transition"
+        >
+          Load First Frame
+        </button>
+
+        <div class="mb-4 text-sm text-gray-600">
+          Click on the frame to draw a polygon. Draw the "No Parking Zone".
+        </div>
+        <button
+          id="clear-polygon-btn"
+          class="w-full bg-gray-200 text-gray-700 rounded p-2 mb-4 hover:bg-gray-300 transition"
+        >
+          Clear Polygon
+        </button>
+
+        <button
+          id="start-detection-btn"
+          class="w-full bg-red-500 text-white rounded p-2 mb-6 hover:bg-red-600 transition font-bold disabled:opacity-50"
+          disabled
+        >
+          Start Detection
+        </button>
+
+        <h3 class="text-md font-bold mb-2">Violation Log</h3>
+        <textarea
+          id="violation-log"
+          class="w-full flex-1 border rounded p-2 text-sm font-mono bg-gray-50 resize-none"
+          readonly
+        ></textarea>
+      </div>
+    </div>
+
+    <script>
+      const videoSelect = document.getElementById("video-select");
+      const loadFrameBtn = document.getElementById("load-frame-btn");
+      const clearPolygonBtn = document.getElementById("clear-polygon-btn");
+      const startDetectionBtn = document.getElementById("start-detection-btn");
+      const videoStream = document.getElementById("video-stream");
+      const overlayCanvas = document.getElementById("overlay-canvas");
+      const violationLog = document.getElementById("violation-log");
+
+      const ctx = overlayCanvas.getContext("2d");
+      let points = [];
+      let isDrawing = false;
+      let detectionRunning = false;
+
+      // Adjust canvas resolution dynamically if needed, but we keep it fixed here for simplicity
+
+      // Draw on Canvas
+      overlayCanvas.addEventListener("mousedown", (e) => {
+        if (detectionRunning) return;
+        const rect = overlayCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        points.push([x, y]);
+        drawPolygon();
+
+        if (points.length >= 3) {
+          startDetectionBtn.disabled = false;
+        }
+      });
+
+      function drawPolygon() {
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        if (points.length === 0) return;
+
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i][0], points[i][1]);
+        }
+        ctx.closePath();
+
+        ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+        ctx.fill();
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw points
+        points.forEach((p) => {
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], 4, 0, Math.PI * 2);
+          ctx.fillStyle = "red";
+          ctx.fill();
+        });
+      }
+
+      clearPolygonBtn.addEventListener("click", () => {
+        points = [];
+        drawPolygon();
+        startDetectionBtn.disabled = true;
+      });
+
+      loadFrameBtn.addEventListener("click", async () => {
+        detectionRunning = false;
+        const videoFilename = videoSelect.value;
+        try {
+          const resp = await fetch(
+            `/video_frame?filename=${encodeURIComponent(videoFilename)}`,
+          );
+          if (!resp.ok) throw new Error("Failed to load frame");
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          videoStream.src = url;
+
+          // Clear canvas
+          points = [];
+          drawPolygon();
+          startDetectionBtn.disabled = true;
+        } catch (err) {
+          console.error(err);
+          alert("Error loading frame. Make sure the video exists.");
+        }
+      });
+
+      startDetectionBtn.addEventListener("click", async () => {
+        if (points.length < 3) return;
+        const videoFilename = videoSelect.value;
+
+        try {
+          // Send polygon to backend
+          const resp = await fetch("/start_detection", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename: videoFilename,
+              polygon: points,
+              width: overlayCanvas.width,
+              height: overlayCanvas.height,
+            }),
+          });
+
+          if (!resp.ok) throw new Error("Failed to start detection");
+
+          detectionRunning = true;
+          // Start streaming annotated video
+          videoStream.src = `/video_stream?t=${Date.now()}`;
+
+          // Clear canvas so the stream's polygon shows
+          ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+          // Connect to violation logs SSE or periodic fetch.
+          // For simplicity, we can fetch logs every 1 second
+          if (window.logInterval) clearInterval(window.logInterval);
+          window.logInterval = setInterval(fetchLogs, 1000);
+        } catch (err) {
+          console.error(err);
+          alert("Error starting detection.");
+        }
+      });
+
+      async function fetchLogs() {
+        if (!detectionRunning) return;
+        try {
+          const resp = await fetch("/violation_logs");
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.logs && data.logs.length > 0) {
+              violationLog.value = data.logs.join("\n");
+              violationLog.scrollTop = violationLog.scrollHeight;
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching logs:", err);
+        }
+      }
+    </script>
+  </body>
+</html>

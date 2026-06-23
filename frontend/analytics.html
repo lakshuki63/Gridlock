@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VisionEnforce — Analytics Command</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/light.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 1024px) {
+      .analytics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .leaderboard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .leaderboard-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+    .leaderboard-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .chart-container {
+      position: relative;
+      height: 280px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAVBAR ═══ -->
+<nav class="navbar">
+  <a href="index.html" class="logo">
+    <div class="logo-icon">
+      <i class="fas fa-eye" style="color:#fff;"></i>
+    </div>
+    <span class="gradient-text">VisionEnforce</span>
+  </a>
+
+  <ul class="nav-links">
+    <li><a href="radar.html"><i class="fas fa-map-location-dot"></i> Radar</a></li>
+    <li><a href="monitor.html"><i class="fas fa-satellite-dish"></i> Monitor</a></li>
+    <li><a href="review.html"><i class="fas fa-user-shield"></i> Review</a></li>
+    <li><a href="analytics.html" class="active"><i class="fas fa-chart-line"></i> Analytics</a></li>
+  </ul>
+
+  <div class="nav-right">
+    <div id="wsIndicator" class="ws-indicator">
+      <div class="ws-dot"></div>
+      <span id="wsStatus">Connecting…</span>
+    </div>
+    <div class="officer-chip" id="officerChip">
+      <div class="officer-avatar" id="officerInitials">OF</div>
+      <span id="officerLabel">OFF-001</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ STATS BAR (KPI OVERVIEW) ═══ -->
+<div class="stats-bar">
+  <div class="stats-bar-item">
+    <span class="stats-bar-val" id="statsTotal">—</span>
+    <span class="stats-bar-lbl">Total Incidents</span>
+  </div>
+  <div class="stats-bar-sep"></div>
+  <div class="stats-bar-item">
+    <span class="stats-bar-val" id="statsPending">—</span>
+    <span class="stats-bar-lbl">Awaiting Review</span>
+  </div>
+  <div class="stats-bar-sep"></div>
+  <div class="stats-bar-item">
+    <span class="stats-bar-val" id="statsAuto">—</span>
+    <span class="stats-bar-lbl">Auto-Processed</span>
+  </div>
+  <div class="stats-bar-sep"></div>
+  <div class="stats-bar-item">
+    <span class="stats-bar-val text-green" id="statsAccuracy">—</span>
+    <span class="stats-bar-lbl">System Accuracy</span>
+  </div>
+  <div class="stats-bar-sep"></div>
+  <div class="stats-bar-item">
+    <span class="stats-bar-val text-cyan" id="statsLatency">—</span>
+    <span class="stats-bar-lbl">Avg Latency</span>
+  </div>
+  
+  <div style="margin-left:auto; display:flex; gap:8px;">
+    <select id="timeRange" class="select" style="width:auto; padding:5px 12px; font-size:0.78rem;">
+      <option value="24">Last 24 Hours</option>
+      <option value="48">Last 48 Hours</option>
+      <option value="168">Last 7 Days</option>
+    </select>
+  </div>
+</div>
+
+<!-- ═══ ANALYTICS DASHBOARD BODY ═══ -->
+<div class="analytics-body">
+  
+  <!-- Row 1: Map + Camera Leaderboard -->
+  <div class="analytics-grid">
+    
+    <!-- Map panel -->
+    <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+      <div class="section-title"><i class="fas fa-map-marked-alt"></i> Camera Violation Density (Bengaluru Map)</div>
+      <div id="leaflet-map"></div>
+    </div>
+
+    <!-- Leaderboard panel -->
+    <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+      <div class="section-title"><i class="fas fa-trophy"></i> Top Violating Intersections</div>
+      <div class="leaderboard-list" id="leaderboardList">
+        <!-- Will load dynamically -->
+        <div class="loading-state"><div class="spinner"></div> Loading leaderboard...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Row 2: Timeseries + Violation Distribution -->
+  <div class="chart-row chart-row-2">
+    
+    <!-- Hourly timeseries chart -->
+    <div class="card">
+      <div class="section-title mb-2"><i class="fas fa-chart-area"></i> Hourly Violation Trend</div>
+      <div class="chart-container">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Violation distribution chart -->
+    <div class="card">
+      <div class="section-title mb-2"><i class="fas fa-chart-bar"></i> Violation Type Distribution</div>
+      <div class="chart-container">
+        <canvas id="distributionChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+  
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- JS imports -->
+<script src="js/analytics.js"></script>
+</body>
+</html>

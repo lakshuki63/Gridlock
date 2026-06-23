@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VisionEnforce — Interactive Polygon Detection</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+
+  <!-- NAVBAR -->
+  <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center space-x-8">
+          <a href="/radar.html" class="flex items-center space-x-2">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-md">
+              <i class="fas fa-eye text-white text-sm"></i>
+            </div>
+            <span class="font-extrabold text-xl bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">VisionEnforce</span>
+          </a>
+          <div class="hidden md:flex space-x-4">
+            <a href="/radar.html" class="text-slate-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+              <i class="fas fa-chart-line mr-1"></i> Congestion Radar
+            </a>
+            <a href="/interactive" class="bg-blue-50 text-blue-600 px-3 py-2 rounded-md text-sm font-semibold transition-colors">
+              <i class="fas fa-draw-polygon mr-1"></i> Interactive Zone Detection
+            </a>
+            <a href="/review.html" class="text-slate-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+              <i class="fas fa-clipboard-check mr-1"></i> Review Queue
+            </a>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="flex items-center space-x-2 bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider">
+            <span class="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+            <span>Interactive ONNX Mode</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-8">
+    
+    <!-- LEFT COLUMN: Drawing Canvas / Video Stream -->
+    <div class="flex-grow bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div>
+          <h2 class="text-lg font-bold text-slate-800">CCTV Zone Configurator</h2>
+          <p class="text-xs text-slate-500">Define custom violation boundaries directly over the feed</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="clearPolygon()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center">
+            <i class="fas fa-trash-can mr-1.5 text-slate-400"></i> Clear Zone
+          </button>
+        </div>
+      </div>
+      
+      <!-- Canvas Wrapper -->
+      <div class="flex-grow flex items-center justify-center p-6 bg-slate-900 border-b border-slate-100 min-h-[400px] relative">
+        <canvas id="drawCanvas" class="max-w-full max-h-[500px] rounded-lg shadow-md cursor-crosshair border border-slate-700 bg-black"></canvas>
+        <img id="streamImg" class="max-w-full max-h-[500px] rounded-lg shadow-md hidden border border-slate-700" alt="Video stream">
+        
+        <div id="canvasOverlay" class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white p-6 text-center">
+          <i class="fas fa-camera text-4xl mb-4 text-slate-400"></i>
+          <h3 class="font-bold text-lg">No Feed Loaded</h3>
+          <p class="text-slate-400 text-sm max-w-xs mt-1">Please select a video file and load the initial frame to draw your zone.</p>
+        </div>
+      </div>
+
+      <!-- Violation Log Panel -->
+      <div class="p-5">
+        <h3 class="font-bold text-sm text-slate-700 mb-3 uppercase tracking-wider flex items-center">
+          <i class="fas fa-circle-exclamation text-red-500 mr-2"></i> Real-time Violation Log
+        </h3>
+        <div id="violationLog" class="bg-slate-950 text-emerald-400 font-mono text-xs p-4 rounded-xl h-36 overflow-y-auto border border-slate-800 shadow-inner flex flex-col space-y-1">
+          <div class="text-slate-500 italic">Waiting for detection to start...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Controls Panel -->
+    <div class="w-full lg:w-96 flex-shrink-0 flex flex-col gap-6">
+      
+      <!-- Control Settings -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-5">
+        <h2 class="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 flex items-center">
+          <i class="fas fa-sliders text-blue-600 mr-2"></i> Settings & Controls
+        </h2>
+        
+        <!-- Video Select -->
+        <div class="flex flex-col gap-2">
+          <label class="text-xs font-bold text-slate-600 uppercase tracking-wide">Select Video Feed</label>
+          <select id="videoSelect" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none bg-slate-50 font-medium">
+            <option value="parking.mp4">parking.mp4 (No-Parking Area)</option>
+            <option value="demo_traffic.mp4">demo_traffic.mp4 (Intersection)</option>
+            <option value="intersection.mp4">intersection.mp4 (Main Road)</option>
+          </select>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="grid grid-cols-2 gap-3">
+          <button id="btnLoadFrame" onclick="loadVideoFrame()" class="w-full bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold px-4 py-2.5 rounded-xl text-sm shadow-sm transition-all flex items-center justify-center gap-2">
+            <i class="fas fa-image text-slate-500"></i> Load Frame
+          </button>
+          <button id="btnStart" onclick="startDetection()" disabled class="w-full bg-slate-300 text-slate-500 font-semibold px-4 py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-not-allowed">
+            <i class="fas fa-play"></i> Start Detect
+          </button>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 leading-relaxed flex items-start gap-2.5">
+          <i class="fas fa-info-circle text-blue-600 mt-0.5"></i>
+          <div>
+            <strong class="text-slate-800">How to use:</strong>
+            <ol class="list-decimal pl-4 mt-1 space-y-1">
+              <li>Select a video and click <strong>Load Frame</strong>.</li>
+              <li>Click points on the canvas to draw a polygon defining the zone.</li>
+              <li>Click <strong>Start Detect</strong> to run ONNX inference.</li>
+              <li>Vehicles staying in the zone > 15 frames are logged as parking violations.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <!-- ONNX Pipeline Stats -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+        <h2 class="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center">
+          <i class="fas fa-network-wired text-indigo-600 mr-2"></i> ONNX Engine
+        </h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="border border-slate-100 rounded-xl p-3 bg-slate-50/50">
+            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Model Status</div>
+            <div class="text-sm font-bold text-slate-700 mt-1 flex items-center">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2"></span> Active
+            </div>
+          </div>
+          <div class="border border-slate-100 rounded-xl p-3 bg-slate-50/50">
+            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Inference Engine</div>
+            <div class="text-sm font-bold text-slate-700 mt-1">ONNX Runtime</div>
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    const streamImg = document.getElementById('streamImg');
+    const canvasOverlay = document.getElementById('canvasOverlay');
+    const btnStart = document.getElementById('btnStart');
+    const videoSelect = document.getElementById('videoSelect');
+    
+    let polygonPoints = [];
+    let frameImage = new Image();
+    let isDrawingEnabled = false;
+    let pollInterval = null;
+
+    // Load first frame of selected video
+    function loadVideoFrame() {
+      // Reset state
+      polygonPoints = [];
+      streamImg.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      btnStart.disabled = true;
+      btnStart.classList.replace('bg-blue-600', 'bg-slate-300');
+      btnStart.classList.replace('text-white', 'text-slate-500');
+      btnStart.classList.add('cursor-not-allowed');
+      
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      
+      const videoFile = videoSelect.value;
+      frameImage.onload = function() {
+        canvasOverlay.classList.add('hidden');
+        canvas.width = frameImage.width;
+        canvas.height = frameImage.height;
+        ctx.drawImage(frameImage, 0, 0);
+        isDrawingEnabled = true;
+        
+        // Enable Start Detection since we have loaded a frame
+        btnStart.disabled = false;
+        btnStart.classList.replace('bg-slate-300', 'bg-blue-600');
+        btnStart.classList.replace('text-slate-500', 'text-white');
+        btnStart.classList.remove('cursor-not-allowed');
+        btnStart.classList.add('hover:bg-blue-700');
+      };
+      frameImage.src = `/video_frame?video=${videoFile}&t=${Date.now()}`;
+    }
+
+    // Canvas click event to draw polygon points
+    canvas.addEventListener('click', function(e) {
+      if (!isDrawingEnabled) return;
+      
+      // Get click position relative to canvas bounding box and scale to canvas resolution
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+      
+      polygonPoints.push([x, y]);
+      redrawCanvas();
+    });
+
+    function redrawCanvas() {
+      // Draw background frame image
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(frameImage, 0, 0);
+      
+      if (polygonPoints.length === 0) return;
+      
+      // Draw points
+      ctx.fillStyle = '#ef4444'; // Red points
+      ctx.strokeStyle = '#2563eb'; // Blue lines
+      ctx.lineWidth = 3;
+      
+      ctx.beginPath();
+      ctx.moveTo(polygonPoints[0][0], polygonPoints[0][1]);
+      
+      for (let i = 0; i < polygonPoints.length; i++) {
+        const pt = polygonPoints[i];
+        // Draw point circles
+        ctx.beginPath();
+        ctx.arc(pt[0], pt[1], 6, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Draw lines connecting points
+        if (i > 0) {
+          ctx.beginPath();
+          ctx.moveTo(polygonPoints[i-1][0], polygonPoints[i-1][1]);
+          ctx.lineTo(pt[0], pt[1]);
+          ctx.stroke();
+        }
+      }
+      
+      // If we have at least 3 points, close the polygon path
+      if (polygonPoints.length >= 3) {
+        ctx.beginPath();
+        ctx.moveTo(polygonPoints[polygonPoints.length-1][0], polygonPoints[polygonPoints.length-1][1]);
+        ctx.lineTo(polygonPoints[0][0], polygonPoints[0][1]);
+        ctx.stroke();
+        
+        // Draw transparent fill
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.15)';
+        ctx.beginPath();
+        ctx.moveTo(polygonPoints[0][0], polygonPoints[0][1]);
+        for (let i = 1; i < polygonPoints.length; i++) {
+          ctx.lineTo(polygonPoints[i][0], polygonPoints[i][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function clearPolygon() {
+      polygonPoints = [];
+      redrawCanvas();
+    }
+
+    // Submit polygon and video name, then start video streaming
+    async function startDetection() {
+      if (polygonPoints.length < 3) {
+        alert("Please draw a polygon with at least 3 points defining the Zone first!");
+        return;
+      }
+      
+      const payload = {
+        polygon: polygonPoints,
+        video: videoSelect.value
+      };
+      
+      const response = await fetch('/start_detection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (response.ok) {
+        // Swap canvas with streaming img
+        canvas.classList.add('hidden');
+        streamImg.classList.remove('hidden');
+        
+        // Set streaming image source to the stream endpoint
+        streamImg.src = `/video_stream?t=${Date.now()}`;
+        
+        // Reset violation log
+        const logBox = document.getElementById('violationLog');
+        logBox.innerHTML = '<div class="text-slate-500 italic">Detection active. Monitoring zone...</div>';
+        
+        // Periodically poll violation logs
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(fetchViolations, 1000);
+      } else {
+        alert("Failed to start detection.");
+      }
+    }
+
+    // Poll for detected violations from API
+    async function fetchViolations() {
+      try {
+        const response = await fetch('/api/onnx_violations');
+        if (response.ok) {
+          const data = await response.json();
+          const logBox = document.getElementById('violationLog');
+          
+          if (data.violations && data.violations.length > 0) {
+            logBox.innerHTML = '';
+            data.violations.forEach(v => {
+              const div = document.createElement('div');
+              div.className = 'text-red-400';
+              div.textContent = `[${v.time}] VIOLATION DETECTED: Vehicle ID ${v.id} parked in Zone >15 frames`;
+              logBox.appendChild(div);
+            });
+            // Auto scroll to bottom
+            logBox.scrollTop = logBox.scrollHeight;
+          }
+        }
+      } catch (e) {
+        console.error("Error polling violations:", e);
+      }
+    }
+  </script>
+</body>
+</html>
