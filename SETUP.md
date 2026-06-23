@@ -5,6 +5,8 @@
 - Python **3.11+** (tested on 3.14)
 - Git
 - ~500MB free disk space
+- https://drive.google.com/drive/folders/1aLRPnS59XJiNl5zhtVXxbai0D1r6z0K6?usp=drive_link 
+download this folder -- contains demo videos .. copy the contain of this folder in the main folder as it is .
 
 ---
 
