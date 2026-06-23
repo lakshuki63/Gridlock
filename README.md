@@ -1,4 +1,4 @@
-# 🚦 VisionEnforce — AI Traffic Violation Detection System
+# VisionEnforce — AI Traffic Violation Detection System
 
 > Real-time traffic violation detection using **YOLOv8 ONNX** + **FastAPI** + interactive zone drawing on live CCTV feeds.
 
@@ -8,16 +8,16 @@
 
 | Feature | Description |
 |---|---|
-| 🗺️ **Congestion Radar** | Live map with real-time risk scores per camera |
-| 🎯 **Interactive Zone Detection** | Draw custom polygon zones → ONNX runs violation detection |
-| 📋 **Review Queue** | Officer challan review & approval workflow |
-| 📊 **Analytics** | Historical violation charts & heatmaps |
-| 🤖 **ONNX Inference** | YOLOv8n (CPU) — no GPU required |
-| 🏙️ **Real Video Support** | Vodra & Talaimari CCTV footage included |
+|  **Congestion Radar** | Live map with real-time risk scores per camera |
+|  **Interactive Zone Detection** | Draw custom polygon zones → ONNX runs violation detection |
+|  **Review Queue** | Officer challan review & approval workflow |
+|  **Analytics** | Historical violation charts & heatmaps |
+|  **ONNX Inference** | YOLOv8n (CPU) — no GPU required |
+|  **Real Video Support** | Vodra & Talaimari CCTV footage included |
 
 ---
 
-## 🏛️ Architecture
+##  Architecture
 
 ```
 CCTV Video
@@ -37,7 +37,7 @@ Browser Dashboard (HTML/JS/Canvas)
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```
 Gridlock/
@@ -59,11 +59,11 @@ Gridlock/
 │   └── crud.py                # Async DB operations
 │
 ├── frontend/
-│   ├── radar.html             # 🗺️ Main map dashboard
-│   ├── interactive.html       # 🎯 ONNX zone detection
-│   ├── review.html            # 📋 Officer review console
-│   ├── analytics.html         # 📊 Charts & stats
-│   └── monitor.html           # 📹 Live feed monitor
+│   ├── radar.html             #  Main map dashboard
+│   ├── interactive.html       # ONNX zone detection
+│   ├── review.html            # Officer review console
+│   ├── analytics.html         # Charts & stats
+│   └── monitor.html           # Live feed monitor
 │
 ├── Vodra/                     # Real CCTV footage (Vodra junction)
 └── Talaimari/                 # Real CCTV footage (Talaimari)
@@ -71,9 +71,11 @@ Gridlock/
 
 ---
 
-## ⚡ Quick Start
+##  Quick Start
 
 See **[SETUP.md](SETUP.md)** for full installation and run instructions.
+https://drive.google.com/drive/folders/1aLRPnS59XJiNl5zhtVXxbai0D1r6z0K6?usp=drive_link 
+dowlad this folder -- contains demo videos .. copy the contain of this folder in the main folder as it is .
 
 ```bash
 pip install -r requirements.txt
@@ -83,7 +85,7 @@ Then open → **http://localhost:8000**
 
 ---
 
-## 🎯 Interactive Zone Detection (Key Feature)
+## Interactive Zone Detection (Key Feature)
 
 1. Go to **http://localhost:8000/interactive**
 2. Select a video feed (`parking.mp4` recommended)
@@ -94,7 +96,7 @@ Then open → **http://localhost:8000**
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Backend**: Python 3.11+, FastAPI, SQLAlchemy (async SQLite)
 - **ML**: YOLOv8n via ONNX Runtime (CPU), OpenCV, Shapely
