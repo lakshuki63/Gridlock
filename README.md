@@ -78,7 +78,7 @@ Gridlock/
 
 See **[SETUP.md](SETUP.md)** for full installation and run instructions.
 https://drive.google.com/drive/folders/1aLRPnS59XJiNl5zhtVXxbai0D1r6z0K6?usp=drive_link 
-dowlad this folder -- contains demo videos .. copy the contain of this folder in the main folder as it is .
+download this folder -- contains demo videos .. copy the contain of this folder in the main folder as it is .
 
 ```bash
 pip install -r requirements.txt
